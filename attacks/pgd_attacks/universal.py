@@ -64,7 +64,7 @@ class UPGD(Attack):
 
         self.model.eval()
         for rest in range(self.n_restarts):
-            if not self.pert:
+            if self.pert == None:
                 if self.rand_init:
                     pert_init = self.random_initialization()
                     pert_init = self.project(pert_init)
