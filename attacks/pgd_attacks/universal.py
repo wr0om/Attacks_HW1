@@ -12,6 +12,25 @@ class UPGD(Attack):
             misc_args=None,
             pgd_args=None):
         super(UPGD, self).__init__(model, criterion, misc_args, pgd_args)
+        
+    # def random_initialization(self, single=True):
+    #     wanted_shape = self.data_shape
+    #     if single:
+    #         wanted_shape = [1] + self.data_shape[1:]
+    #     if self.norm == 'Linf':
+    #         return torch.empty(wanted_shape, dtype=self.dtype, device=self.device).uniform_(-1, 1) * self.eps
+    #     else:
+    #         return torch.empty(wanted_shape, dtype=self.dtype, device=self.device).normal_(0, self.eps * self.eps)
+        
+    # def set_params(self, x, targeted):
+    #     self.batch_size = x.shape[0]
+    #     self.data_shape[0] = x.shape[0]
+    #     self.set_multiplier(targeted)
+    #     self.pert_lb = self.data_RGB_start - x
+    #     self.pert_ub = self.data_RGB_end - x
+    #     # we only use a single perturbation for all images in the batch
+    #     self.pert_lb = torch.min(self.pert_lb, dim=0, keepdim=True)[0]
+    #     self.pert_ub = torch.max(self.pert_ub, dim=0, keepdim=True)[0]
 
     def report_schematics(self):
 
@@ -27,7 +46,6 @@ class UPGD(Attack):
             x.shape: torch.Size([250, 3, 32, 32])
             y.shape: torch.Size([250])
         """
-        self.data_shape = x[0].shape
         # SIMPLE UPGD (calculate perturbation for each image separately)
 
         with torch.no_grad():
@@ -50,10 +68,7 @@ class UPGD(Attack):
                 pert_init = self.random_initialization()
                 pert_init = self.project(pert_init)
             else:
-                pert_init = torch.zeros_like(x,)
-
-            pert_init = pert_init[0]
-
+                pert_init = torch.zeros_like(x)
 
             with torch.no_grad():
                 loss, succ = self.eval_pert(x, y, pert_init)
@@ -64,17 +79,16 @@ class UPGD(Attack):
 
             pert = pert_init.clone().detach()
             for k in range(1, self.n_iter + 1):
-                pert.requires_grad_()
-                stacked_pert = pert.repeat(self.batch_size, 1, 1, 1)
-                print("x.shape:", x.shape)
-                print("stacked_pert.shape:", stacked_pert.shape)
-                print("pert.shape:", pert.shape)
-                train_loss = self.criterion(self.model.forward(x + stacked_pert), y)
-                grad = torch.autograd.grad(train_loss.mean(), [pert])[0].detach()
-
+                temp_pert = pert[0]
+                temp_pert.requires_grad_()
+                pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
+                train_loss = self.criterion(self.model.forward(x+pert), y)
+                grad = torch.autograd.grad(train_loss.mean(), [temp_pert])[0].detach()
+                temp_pert = temp_pert.unsqueeze(0)
                 with torch.no_grad():
-                    pert = self.step(pert, grad)
-
+                    grad = self.normalize_grad(grad)
+                    temp_pert += self.multiplier * grad
+                pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
                 pert = self.project(pert)
                 loss, succ = self.eval_pert(x, y, pert)
                 self.update_best(best_loss, loss, [best_pert, best_succ], [pert, succ])
