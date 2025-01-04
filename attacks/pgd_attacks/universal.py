@@ -41,6 +41,16 @@ class UPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
 
+    def update_best(self, best_crit, new_crit, best_ls, new_ls):
+        # because we only have a single perturbation for all images in the batch
+        # we only need to compare the avg loss of the batch to decide if we should update the whole batch
+        if new_crit.mean() > best_crit.mean():
+            best_crit = new_crit.clone().detach()
+            best_ls[0] = new_ls[0].clone().detach()
+            best_ls[1] = new_ls[1].clone().detach()
+
+        return best_ls[0], best_ls[1], best_crit
+
     def perturb(self, x, y, targeted=False):
         """
             x.shape: torch.Size([250, 3, 32, 32])
@@ -72,9 +82,17 @@ class UPGD(Attack):
                     pert_init = torch.zeros_like(x)
             else:
                 pert_init = self.pert
+
+            temp_pert = pert_init[0] # [3, 32, 32]
+            #pert_init = temp_pert.repeat(self.batch_size, 1, 1, 1)
+            pert_init = torch.stack([temp_pert]*self.batch_size, dim=0)
+            print(f"1: {torch.unique(pert_init, dim=0).shape[0]}")
             with torch.no_grad():
                 loss, succ = self.eval_pert(x, y, pert_init)
-                self.update_best(best_loss, loss, [best_pert, best_succ], [pert_init, succ])
+                old_best_pert = best_pert.clone().detach()
+                best_pert, best_succ, best_loss = \
+                    self.update_best(best_loss, loss, [best_pert, best_succ], [pert_init, succ])
+                print(f"2: {torch.unique(best_pert, dim=0).shape[0]}")
                 if self.report_info:
                     all_best_succ[rest, 0] = best_succ
                     all_best_loss[rest, 0] = best_loss
@@ -84,16 +102,25 @@ class UPGD(Attack):
                 temp_pert = pert[0]
                 temp_pert.requires_grad_()
                 pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
+                print(f"3: {torch.unique(pert, dim=0).shape[0]}")
                 train_loss = self.criterion(self.model.forward(x+pert), y)
                 grad = torch.autograd.grad(train_loss.mean(), [temp_pert])[0].detach()
                 temp_pert = temp_pert.unsqueeze(0)
                 with torch.no_grad():
                     grad = self.normalize_grad(grad)
                     temp_pert += self.multiplier * grad
-                pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
+
+                #pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
+                pert = torch.stack([temp_pert[0]]*self.batch_size, dim=0)
                 pert = self.project(pert)
+                temp_pert = pert[0]
+                pert = torch.stack([temp_pert]*self.batch_size, dim=0)
+
+                print(f"4: {torch.unique(pert, dim=0).shape[0]}")
                 loss, succ = self.eval_pert(x, y, pert)
-                self.update_best(best_loss, loss, [best_pert, best_succ], [pert, succ])
+                best_pert, best_succ, best_loss = \
+                    self.update_best(best_loss, loss, [best_pert, best_succ], [pert, succ])
+                print(f"5: {torch.unique(best_pert, dim=0).shape[0]}")
                 if self.report_info:
                     all_best_succ[rest, k] = succ
                     all_best_loss[rest, k] = loss
@@ -101,5 +128,6 @@ class UPGD(Attack):
         adv_pert = best_pert.clone().detach()
         adv_pert_loss = best_loss.clone().detach()
         self.pert = adv_pert
+        print(f"6: {torch.unique(adv_pert, dim=0).shape[0]}")
         return adv_pert, adv_pert_loss, all_best_succ, all_best_loss
 
