@@ -1,0 +1,23 @@
+(1) Recomended install mamba as in: https://github.com/conda-forge/miniforge#mambaforge. If you prefer to use conda proceed to (2) and replace "mamba" commands with "conda" commands.
+
+(1.1) First remove any previous Anaconda/miniconda installation via:
+conda activate base
+conda install anaconda-clean
+anaconda-clean --yes
+rm -rf ~/miniconda3
+rm -rf ~/miniforge3
+rm -rf ~/anaconda3
+rm -rf ~/.anaconda_backup
+
+(1.2) Install mamba as in: https://github.com/conda-forge/miniforge#mambaforge:
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh"
+bash Miniforge3-Linux-x86_64.sh
+conda config --set auto_activate_base false
+
+(2) Install cs236207 envoirment:
+mamba create -n cs236207
+mamba activate cs236207
+mamba install pytorch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 pytorch-cuda=12.1 cuda-cudart-dev=12.1 opencv-python-headless pip -c pytorch -c nvidia -c conda-forge -c fastai
+pip install git+https://github.com/fra31/auto-attack
+pip install git+https://github.com/RobustBench/robustbench.git
+
