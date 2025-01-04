@@ -1,6 +1,6 @@
 import torch
 from attacks.pgd_attacks.attack import Attack
-
+from torch.utils.data import TensorDataset, DataLoader
 
 
 
@@ -12,7 +12,7 @@ class UPGD(Attack):
             misc_args=None,
             pgd_args=None):
         super(UPGD, self).__init__(model, criterion, misc_args, pgd_args)
-        
+        self.pert = None
     # def random_initialization(self, single=True):
     #     wanted_shape = self.data_shape
     #     if single:
@@ -64,12 +64,14 @@ class UPGD(Attack):
 
         self.model.eval()
         for rest in range(self.n_restarts):
-            if self.rand_init:
-                pert_init = self.random_initialization()
-                pert_init = self.project(pert_init)
+            if not self.pert:
+                if self.rand_init:
+                    pert_init = self.random_initialization()
+                    pert_init = self.project(pert_init)
+                else:
+                    pert_init = torch.zeros_like(x)
             else:
-                pert_init = torch.zeros_like(x)
-
+                pert_init = self.pert
             with torch.no_grad():
                 loss, succ = self.eval_pert(x, y, pert_init)
                 self.update_best(best_loss, loss, [best_pert, best_succ], [pert_init, succ])
@@ -98,5 +100,6 @@ class UPGD(Attack):
 
         adv_pert = best_pert.clone().detach()
         adv_pert_loss = best_loss.clone().detach()
+        self.pert = adv_pert
         return adv_pert, adv_pert_loss, all_best_succ, all_best_loss
 
