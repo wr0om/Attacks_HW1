@@ -19,10 +19,10 @@ def run_adv_attacks(args):
     args.attack_obj.report_schematics()
     att_report_info = args.attack_obj.report_info
 
-    (init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss,
+    (universal_pert, init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss,
      acc_steps, avg_loss_steps, perts_max_l_inf,
      adv_batch_compute_time_mean, adv_batch_compute_time_std, tot_adv_compute_time, tot_adv_compute_time_std) = \
-        adv_runner.run_standard_evaluation(args.x_test, args.y_test, args.n_examples, bs=args.batch_size)
+        adv_runner.run_standard_evaluation(args.x_test, args.y_test, args.n_examples)#, bs=args.batch_size)
 
     adv_succ_ratio = (init_accuracy - robust_accuracy) / init_accuracy
     print("reporting results for adversarial attack on Model: " + args.model_name)
@@ -58,6 +58,11 @@ def run_adv_attacks(args):
         print("saving adv inputs images to path:")
         print(save_path)
         save_img_tensors(save_path, x_adv, args.y_test, y_adv, args.labels_str_dict)
+
+        save_path = args.adv_pert_save_path + '/universal_pert.pt'
+        print("saving universal perturbation tensor to path:")
+        print(save_path)
+        torch.save(universal_pert, save_path)
 
 
 if __name__ == '__main__':

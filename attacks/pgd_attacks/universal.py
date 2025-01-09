@@ -1,36 +1,20 @@
 import torch
 from attacks.pgd_attacks.attack import Attack
-from torch.utils.data import TensorDataset, DataLoader
-
-
 
 class UPGD(Attack):
-    def __init__(
-            self,
-            model,
-            criterion,
-            misc_args=None,
-            pgd_args=None):
+    def __init__(self, model, criterion, misc_args=None, pgd_args=None):
         super(UPGD, self).__init__(model, criterion, misc_args, pgd_args)
-        self.pert = None
-    # def random_initialization(self, single=True):
-    #     wanted_shape = self.data_shape
-    #     if single:
-    #         wanted_shape = [1] + self.data_shape[1:]
-    #     if self.norm == 'Linf':
-    #         return torch.empty(wanted_shape, dtype=self.dtype, device=self.device).uniform_(-1, 1) * self.eps
-    #     else:
-    #         return torch.empty(wanted_shape, dtype=self.dtype, device=self.device).normal_(0, self.eps * self.eps)
-        
-    # def set_params(self, x, targeted):
-    #     self.batch_size = x.shape[0]
-    #     self.data_shape[0] = x.shape[0]
-    #     self.set_multiplier(targeted)
-    #     self.pert_lb = self.data_RGB_start - x
-    #     self.pert_ub = self.data_RGB_end - x
-    #     # we only use a single perturbation for all images in the batch
-    #     self.pert_lb = torch.min(self.pert_lb, dim=0, keepdim=True)[0]
-    #     self.pert_ub = torch.max(self.pert_ub, dim=0, keepdim=True)[0]
+        self.alpha = pgd_args['alpha']
+        self.eps = pgd_args['eps']
+        self.n_iter = pgd_args['n_iter']
+        self.n_restarts = pgd_args['n_restarts']
+        self.rand_init = pgd_args['rand_init']
+        self.device = misc_args['device']
+
+        # Broadcast self.data_RGB_start and self.data_RGB_end to [C, H, W]
+        data_shape = misc_args['data_shape']
+        self.data_RGB_start = torch.tensor(misc_args['data_RGB_start'], device=self.device).view(-1, 1, 1).expand(data_shape)
+        self.data_RGB_end = torch.tensor(misc_args['data_RGB_end'], device=self.device).view(-1, 1, 1).expand(data_shape)
 
     def report_schematics(self):
 
@@ -41,93 +25,69 @@ class UPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
 
-    def update_best(self, best_crit, new_crit, best_ls, new_ls):
-        # because we only have a single perturbation for all images in the batch
-        # we only need to compare the avg loss of the batch to decide if we should update the whole batch
-        if new_crit.mean() > best_crit.mean():
-            best_crit = new_crit.clone().detach()
-            best_ls[0] = new_ls[0].clone().detach()
-            best_ls[1] = new_ls[1].clone().detach()
-
-        return best_ls[0], best_ls[1], best_crit
-
-    def perturb(self, x, y, targeted=False):
+    def perturb(self, x, y, targeted=False, batch_size=128):
         """
-            x.shape: torch.Size([250, 3, 32, 32])
-            y.shape: torch.Size([250])
+        Calculate a universal perturbation for the dataset using batch processing.
+        Args:
+            x: Input data tensor, shape (N, C, H, W).
+            y: Target labels, shape (N,).
+            targeted: If True, perform a targeted attack; otherwise, untargeted.
+            batch_size: Number of samples to process in each batch.
+        Returns:
+            universal_pert: Universal perturbation tensor, shape (C, H, W).
+            adv_pert_loss: Final loss after applying the universal perturbation.
         """
-        # SIMPLE UPGD (calculate perturbation for each image separately)
-
-        with torch.no_grad():
-            self.set_params(x, targeted)
-            self.clean_loss, self.clean_succ = self.eval_pert(x, y, pert=torch.zeros_like(x))
-            best_pert = torch.zeros_like(x)
-            best_loss = self.clean_loss.clone().detach()
-            best_succ = self.clean_succ.clone().detach()
-
-            if self.report_info:
-                all_best_succ = torch.zeros(self.n_restarts,  self.n_iter + 1, self.batch_size, dtype=torch.bool, device=self.device)
-                all_best_loss = torch.zeros(self.n_restarts,  self.n_iter + 1, self.batch_size, dtype=self.dtype, device=self.device)
-            else:
-                all_best_succ = None
-                all_best_loss = None
+        # Initialize universal perturbation with the same dimensions as inputs
+        universal_pert = torch.zeros_like(x[0], device=self.device)
+        best_loss = float('inf')
 
         self.model.eval()
+
         for rest in range(self.n_restarts):
-            if self.pert == None:
-                if self.rand_init:
-                    pert_init = self.random_initialization()
-                    pert_init = self.project(pert_init)
-                else:
-                    pert_init = torch.zeros_like(x)
+            # Initialize perturbation for this restart
+            if self.rand_init:
+                pert = torch.empty_like(universal_pert).uniform_(-self.eps, self.eps)
             else:
-                pert_init = self.pert
+                pert = universal_pert.clone()
 
-            temp_pert = pert_init[0] # [3, 32, 32]
-            #pert_init = temp_pert.repeat(self.batch_size, 1, 1, 1)
-            pert_init = torch.stack([temp_pert]*self.batch_size, dim=0)
-            print(f"1: {torch.unique(pert_init, dim=0).shape[0]}")
-            with torch.no_grad():
-                loss, succ = self.eval_pert(x, y, pert_init)
-                old_best_pert = best_pert.clone().detach()
-                best_pert, best_succ, best_loss = \
-                    self.update_best(best_loss, loss, [best_pert, best_succ], [pert_init, succ])
-                print(f"2: {torch.unique(best_pert, dim=0).shape[0]}")
-                if self.report_info:
-                    all_best_succ[rest, 0] = best_succ
-                    all_best_loss[rest, 0] = best_loss
+            pert.requires_grad = True  # Ensure gradient tracking
 
-            pert = pert_init.clone().detach()
-            for k in range(1, self.n_iter + 1):
-                temp_pert = pert[0]
-                temp_pert.requires_grad_()
-                pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
-                print(f"3: {torch.unique(pert, dim=0).shape[0]}")
-                train_loss = self.criterion(self.model.forward(x+pert), y)
-                grad = torch.autograd.grad(train_loss.mean(), [temp_pert])[0].detach()
-                temp_pert = temp_pert.unsqueeze(0)
-                with torch.no_grad():
-                    grad = self.normalize_grad(grad)
-                    temp_pert += self.multiplier * grad
+            for _ in range(self.n_iter):
+                total_loss = 0.0
 
-                #pert = temp_pert.repeat(self.batch_size, 1, 1, 1)
-                pert = torch.stack([temp_pert[0]]*self.batch_size, dim=0)
-                pert = self.project(pert)
-                temp_pert = pert[0]
-                pert = torch.stack([temp_pert]*self.batch_size, dim=0)
+                for batch_start in range(0, len(x), batch_size):
+                    # Process a batch of samples
+                    batch_end = min(batch_start + batch_size, len(x))
+                    batch_x = x[batch_start:batch_end].to(self.device)  # Batch of inputs
+                    batch_y = y[batch_start:batch_end].to(self.device)  # Corresponding labels
 
-                print(f"4: {torch.unique(pert, dim=0).shape[0]}")
-                loss, succ = self.eval_pert(x, y, pert)
-                best_pert, best_succ, best_loss = \
-                    self.update_best(best_loss, loss, [best_pert, best_succ], [pert, succ])
-                print(f"5: {torch.unique(best_pert, dim=0).shape[0]}")
-                if self.report_info:
-                    all_best_succ[rest, k] = succ
-                    all_best_loss[rest, k] = loss
+                    # Apply the universal perturbation
+                    perturbed_x = torch.clamp(batch_x + pert, self.data_RGB_start, self.data_RGB_end)
 
-        adv_pert = best_pert.clone().detach()
-        adv_pert_loss = best_loss.clone().detach()
-        self.pert = adv_pert
-        print(f"6: {torch.unique(adv_pert, dim=0).shape[0]}")
-        return adv_pert, adv_pert_loss, all_best_succ, all_best_loss
+                    # Compute loss for the batch
+                    output = self.model(perturbed_x)
+                    loss = self.criterion(output, batch_y).mean()
+                    total_loss += loss.item()
+
+                    # Compute gradient
+                    grad = torch.autograd.grad(loss, pert, retain_graph=False)[0]
+                    grad = grad.mean(dim=0)  # Aggregate gradients across the batch
+
+                    # Update perturbation
+                    with torch.no_grad():
+                        pert += self.alpha * grad.sign()
+                        pert = torch.clamp(pert, -self.eps, self.eps)  # Enforce L_inf constraint
+                        pert = torch.clamp(batch_x + pert, self.data_RGB_start, self.data_RGB_end).mean(dim=0) - batch_x.mean(dim=0)
+
+                    # Re-enable requires_grad for the next iteration
+                    pert.requires_grad = True
+
+                # Update the universal perturbation if it improves performance
+                if total_loss < best_loss:
+                    best_loss = total_loss
+                    universal_pert = pert.clone().detach()  # Detach to save the best perturbation
+                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_loss}")
+
+        return universal_pert, best_loss
+
 
