@@ -25,7 +25,7 @@ class UPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
 
-    def perturb(self, x, y, targeted=False, batch_size=128):
+    def perturb(self, x, y, targeted=False, batch_size=64):
         """
         Calculate a universal perturbation for the dataset using batch processing.
         Args:

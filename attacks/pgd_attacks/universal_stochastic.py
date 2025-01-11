@@ -89,7 +89,7 @@ class StochasticUPGD(Attack):
                 # Update the universal perturbation (always cause we sample random indices)
                 if total_loss > best_loss: # Model has higher loss - pertubation is successfull
                     best_loss = total_loss
-                universal_pert = pert.clone().detach()  # Detach to save the best perturbation
+                    universal_pert = pert.clone().detach()  # Detach to save the best perturbation
                 print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Best Loss: {best_loss}, Current Loss: {total_loss}")
 
         return universal_pert, best_loss
