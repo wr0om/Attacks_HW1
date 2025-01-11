@@ -9,7 +9,7 @@ from robustbench.utils import load_model
 import torchvision.transforms as transforms
 from models.cifar10.resnet import ResNet18
 
-from attacks.pgd_attacks import PGD, UPGD
+from attacks.pgd_attacks import PGD, UPGD, StochasticUPGD
 
 
 def parse_args():
@@ -35,7 +35,7 @@ def parse_args():
     # Use --model_name Wong2020Fast for robust PreActResNet-18 model
     # attack args
     # pgd attacks args
-    parser.add_argument('--attack', type=str, default='PGD', help='PGD, UPGD')
+    parser.add_argument('--attack', type=str, default='PGD', help='PGD, UPGD, StochasticUPGD')
     parser.add_argument('--eps_l_inf_from_255', type=int, default=8)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--n_restarts', type=int, default=1, help='number of restart iterations for pgd_attacks')
@@ -107,7 +107,7 @@ def compute_attack_args(args):
     args.eps_l_inf = args.eps_l_inf_from_255 / 255
     args.att_rand_init = not args.att_init_zeros
 
-    attack_dict = {'PGD': PGD, 'UPGD': UPGD}
+    attack_dict = {'PGD': PGD, 'UPGD': UPGD, 'StochasticUPGD': StochasticUPGD}
     args.attack_name = args.attack
     if args.attack in attack_dict:
         args.attack = attack_dict[args.attack]

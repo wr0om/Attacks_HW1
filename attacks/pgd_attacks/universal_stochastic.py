@@ -1,9 +1,9 @@
 import torch
 from attacks.pgd_attacks.attack import Attack
 
-class UPGD(Attack):
+class StochasticUPGD(Attack):
     def __init__(self, model, criterion, misc_args=None, pgd_args=None):
-        super(UPGD, self).__init__(model, criterion, misc_args, pgd_args)
+        super(StochasticUPGD, self).__init__(model, criterion, misc_args, pgd_args)
         self.alpha = pgd_args['alpha']
         self.eps = pgd_args['eps']
         self.n_iter = pgd_args['n_iter']
@@ -25,7 +25,7 @@ class UPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
 
-    def perturb(self, x, y, targeted=False, batch_size=128):
+    def perturb(self, x, y, targeted=False, batch_size=128, sample_size=512):
         """
         Calculate a universal perturbation for the dataset using batch processing.
         Args:
@@ -39,7 +39,7 @@ class UPGD(Attack):
         """
         # Initialize universal perturbation with the same dimensions as inputs
         universal_pert = torch.zeros_like(x[0], device=self.device)
-        best_loss = 0.0 # Start from perfect loss - we want to maximize it
+        best_loss = 0.0
 
         self.model.eval()
 
@@ -53,13 +53,17 @@ class UPGD(Attack):
             pert.requires_grad = True  # Ensure gradient tracking
 
             for _ in range(self.n_iter):
-                total_loss = 0.0
+                total_loss = 0.0 # Start from perfect loss - we want to maximize it
+
+                # Sample random indices for the iteration
+                indices = torch.randperm(len(x))[:sample_size]
 
                 for batch_start in range(0, len(x), batch_size):
+                    batch_indices = indices[(batch_start <= indices) & (indices < batch_start + batch_size)]
+
                     # Process a batch of samples
-                    batch_end = min(batch_start + batch_size, len(x))
-                    batch_x = x[batch_start:batch_end].to(self.device)  # Batch of inputs
-                    batch_y = y[batch_start:batch_end].to(self.device)  # Corresponding labels
+                    batch_x = x[batch_indices].to(self.device)  # Batch of inputs
+                    batch_y = y[batch_indices].to(self.device)  # Corresponding labels
 
                     # Apply the universal perturbation
                     perturbed_x = torch.clamp(batch_x + pert, self.data_RGB_start, self.data_RGB_end)
@@ -82,11 +86,11 @@ class UPGD(Attack):
                     # Re-enable requires_grad for the next iteration
                     pert.requires_grad = True
 
-                # Update the universal perturbation if it improves performance
-                if total_loss > best_loss:
+                # Update the universal perturbation (always cause we sample random indices)
+                if total_loss > best_loss: # Model has higher loss - pertubation is successfull
                     best_loss = total_loss
-                    universal_pert = pert.clone().detach()  # Detach to save the best perturbation
-                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_loss}")
+                universal_pert = pert.clone().detach()  # Detach to save the best perturbation
+                print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Best Loss: {best_loss}, Current Loss: {total_loss}")
 
         return universal_pert, best_loss
 
