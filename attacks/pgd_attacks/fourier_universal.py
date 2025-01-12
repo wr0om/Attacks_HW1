@@ -3,9 +3,9 @@ from attacks.pgd_attacks.attack import Attack
 import numpy as np
 from matplotlib import pyplot as plt
 
-class UPGD(Attack):
+class FourierUPGD(Attack):
     def __init__(self, model, criterion, misc_args=None, pgd_args=None):
-        super(UPGD, self).__init__(model, criterion, misc_args, pgd_args)
+        super(FourierUPGD, self).__init__(model, criterion, misc_args, pgd_args)
         self.alpha = pgd_args['alpha']
         self.eps = pgd_args['eps']
         self.n_iter = pgd_args['n_iter']
@@ -27,31 +27,32 @@ class UPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
         
-    # def generate_fourier_noise(self, image_shape, epsilon):
-    #     perts = []
-    #     for i in range(image_shape[0]):
-    #         channels, height, width = image_shape
-    #         freq_space = np.fft.fft2(np.random.normal(size=(height, width)))
+    def generate_fourier_noise(self, image_shape, epsilon):
+        perts = []
+        for i in range(image_shape[0]):
+            channels, height, width = image_shape
+            freq_space = np.fft.fft2(np.random.normal(size=(height, width)))
             
-    #         # Generate high-frequency emphasis mask
-    #         y = np.fft.fftfreq(height).reshape(-1, 1)
-    #         x = np.fft.fftfreq(width).reshape(1, -1)
-    #         radius = np.sqrt(x**2 + y**2)
-    #         high_freq_mask = radius > 0.3  # Emphasize high frequencies (adjust threshold)
+            # Generate high-frequency emphasis mask
+            y = np.fft.fftfreq(height).reshape(-1, 1)
+            x = np.fft.fftfreq(width).reshape(1, -1)
+            radius = np.sqrt(x**2 + y**2)
+            high_freq_mask = radius > 0.7  # Emphasize high frequencies (adjust threshold)
             
-    #         # Apply mask to frequency space
-    #         freq_space *= high_freq_mask
+            # Apply mask to frequency space
+            freq_space *= high_freq_mask
             
-    #         # Transform back to spatial domain
-    #         noise = np.fft.ifft2(freq_space).real
+            # Transform back to spatial domain
+            noise = np.fft.ifft2(freq_space).real
             
-    #         # Normalize to [-epsilon, epsilon]
-    #         noise = (noise - np.mean(noise)) / (np.max(np.abs(noise)) + 1e-10) * epsilon
-    #         plt.imshow(noise)
-    #         plt.savefig('noise.png')
-    #         plt.close()
-    #         perts.append(noise)
-    #     return torch.tensor(perts, device=self.device, dtype=torch.float32)
+            # Normalize to [-epsilon, epsilon]
+            noise = (noise - np.mean(noise)) / (np.max(np.abs(noise)) + 1e-10) * (epsilon * 49/50) + np.random.uniform(-epsilon * 1/50, epsilon * 1/50)
+            plt.imshow(noise)
+            plt.colorbar()
+            plt.savefig('noise.png')
+            plt.close()
+            perts.append(noise)
+        return torch.tensor(perts, device=self.device, dtype=torch.float32)
 
 
     def perturb(self, x, y, targeted=False, batch_size=64):
@@ -75,8 +76,8 @@ class UPGD(Attack):
         for rest in range(self.n_restarts):
             # Initialize perturbation for this restart
             if self.rand_init:
-                # pert = self.generate_fourier_noise(universal_pert.shape, self.eps)
-                pert = torch.empty_like(universal_pert).uniform_(-self.eps, self.eps)
+                pert = self.generate_fourier_noise(universal_pert.shape, self.eps)
+                # pert = torch.empty_like(universal_pert).uniform_(-self.eps, self.eps)
                 # pert = torch.empty_like(universal_pert).normal_(mean=0, std=self.eps / 4).clamp(-self.eps, self.eps)
             else:
                 pert = universal_pert.clone()
