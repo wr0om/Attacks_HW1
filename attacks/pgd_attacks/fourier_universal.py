@@ -46,7 +46,7 @@ class FourierUPGD(Attack):
             noise = np.fft.ifft2(freq_space).real
             
             # Normalize to [-epsilon, epsilon]
-            noise = (noise - np.mean(noise)) / (np.max(np.abs(noise)) + 1e-10) * (epsilon * 49/50) + np.random.uniform(-epsilon * 1/50, epsilon * 1/50)
+            noise = (noise - np.mean(noise)) / (np.max(np.abs(noise)) + 1e-10) * (epsilon * 40/50) + np.random.uniform(-epsilon * 10/50, epsilon * 10/50)
             plt.imshow(noise)
             plt.colorbar()
             plt.savefig('noise.png')
