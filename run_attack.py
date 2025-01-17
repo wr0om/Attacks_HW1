@@ -21,8 +21,8 @@ def run_adv_attacks(args):
 
     (universal_pert, init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss,
      acc_steps, avg_loss_steps, perts_max_l_inf,
-     adv_batch_compute_time_mean, adv_batch_compute_time_std, tot_adv_compute_time, tot_adv_compute_time_std) = \
-        adv_runner.run_standard_evaluation(args.x_test, args.y_test, args.n_examples)#, bs=args.batch_size)
+     adv_batch_compute_time_mean, adv_batch_compute_time_std, tot_adv_compute_time, tot_adv_compute_time_std, yaniv_accuracy) = \
+        adv_runner.run_standard_evaluation(args.x_test, args.y_test, args.n_examples, batch_size=args.batch_size)
 
     adv_succ_ratio = (init_accuracy - robust_accuracy) / init_accuracy
     print("reporting results for adversarial attack on Model: " + args.model_name)
@@ -33,6 +33,7 @@ def run_adv_attacks(args):
     print(f'adversarial average loss: {adv_loss}')
     print(f'perturbations L_inf norm limitation : {args.eps_l_inf}')
     print(f'max L_inf in perturbations: {perts_max_l_inf}')
+    print(f'yaniv accuracy: {yaniv_accuracy}')
     print("attack mean compute time over data batches")
     print(adv_batch_compute_time_mean)
     print("attack std compute time over data batches")

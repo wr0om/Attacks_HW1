@@ -68,7 +68,7 @@ class UPGD(Attack):
         """
         # Initialize universal perturbation with the same dimensions as inputs
         universal_pert = torch.zeros_like(x[0], device=self.device)
-        best_loss = 0.0 # Start from perfect loss - we want to maximize it
+        best_mean_loss = 0.0 # Start from perfect loss - we want to maximize it
 
         self.model.eval()
 
@@ -109,16 +109,20 @@ class UPGD(Attack):
                         pert += self.alpha * grad.sign()
                         pert = torch.clamp(pert, -self.eps, self.eps)  # Enforce L_inf constraint
                         pert = torch.clamp(batch_x + pert, self.data_RGB_start, self.data_RGB_end).mean(dim=0) - batch_x.mean(dim=0)
-
                     # Re-enable requires_grad for the next iteration
                     pert.requires_grad = True
-
+                mean_loss = total_loss / len(x)
                 # Update the universal perturbation if it improves performance
-                if total_loss > best_loss:
-                    best_loss = total_loss
+                if mean_loss > best_mean_loss:
+                    best_mean_loss = mean_loss
                     universal_pert = pert.clone().detach()  # Detach to save the best perturbation
-                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_loss}")
-
-        return universal_pert, best_loss
+                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Mean Loss: {best_mean_loss}")
+        # clamp perturbation to epsilon
+        # universal_pert = torch.clamp(universal_pert, -self.eps, self.eps)
+        universal_pert.clamp_(-self.eps, self.eps)
+        print(f"EPSILON: {self.eps}")
+        print(f"MAX PERT: {universal_pert.abs().max()}")
+        print(f"TEST: {universal_pert.abs().max() <= self.eps}")
+        return universal_pert, best_mean_loss
 
 
