@@ -37,7 +37,7 @@ class FourierUPGD(Attack):
             y = np.fft.fftfreq(height).reshape(-1, 1)
             x = np.fft.fftfreq(width).reshape(1, -1)
             radius = np.sqrt(x**2 + y**2)
-            high_freq_mask = radius > 0.7  # Emphasize high frequencies (adjust threshold)
+            high_freq_mask = radius > 0.9  # Emphasize high frequencies (adjust threshold)
             
             # Apply mask to frequency space
             freq_space *= high_freq_mask
@@ -83,7 +83,7 @@ class FourierUPGD(Attack):
                 pert = universal_pert.clone()
 
             pert.requires_grad = True  # Ensure gradient tracking
-
+            alpha = self.alpha
             for _ in range(self.n_iter):
                 total_loss = 0.0
 
@@ -107,7 +107,7 @@ class FourierUPGD(Attack):
 
                     # Update perturbation
                     with torch.no_grad():
-                        pert += self.alpha * grad.sign()
+                        pert += alpha * grad.sign()
                         pert = torch.clamp(pert, -self.eps, self.eps)  # Enforce L_inf constraint
                         pert = torch.clamp(batch_x + pert, self.data_RGB_start, self.data_RGB_end).mean(dim=0) - batch_x.mean(dim=0)
 
@@ -116,6 +116,7 @@ class FourierUPGD(Attack):
 
                 # Update the universal perturbation if it improves performance
                 if total_loss > best_loss:
+                    alpha = alpha/2
                     best_loss = total_loss
                     universal_pert = pert.clone().detach()  # Detach to save the best perturbation
                     print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_loss}")
