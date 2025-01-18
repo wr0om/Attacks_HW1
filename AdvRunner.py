@@ -24,9 +24,6 @@ class AdvRunner:
     #     robust_flags = torch.zeros(n_examples, dtype=torch.bool, device=orig_device)
 
     #     # Transfer data to the device and process in batches
-
-        
-        
     #     x = x_orig.clone().detach().to(self.device)
     #     y = y_orig.clone().detach().to(self.device)
 
@@ -83,8 +80,16 @@ class AdvRunner:
 
             # Evaluate on clean examples
             robust_flags, n_robust_examples, init_accuracy = self.run_clean_evaluation(
-                x_orig, y_orig, n_examples, orig_device
+                x_orig, y_orig, n_examples, orig_device, batch_size
             )
+
+        if self.attack_report_info:
+            info_shape = [self.attack_restarts, self.attack_iter + 1, n_examples]
+            all_succ = torch.zeros(info_shape, dtype=self.dtype, device=orig_device)
+            all_loss = torch.zeros(info_shape, dtype=self.dtype, device=orig_device)
+        else:
+            all_succ = None
+            all_loss = None
 
         # Generate universal adversarial perturbation
         with torch.cuda.device(self.device):
@@ -92,23 +97,26 @@ class AdvRunner:
             y = y_orig.clone().detach()
 
             # Generate the universal perturbation
-            universal_pert, adv_loss = self.attack.perturb(x, y)
-            
+            universal_pert, adv_loss, mean_loss_per_step = self.attack.perturb(x, y, batch_size=batch_size)
+            # check universal_pert is appropriate norm
+            # assert universal_pert.abs().max().item() <= self.attack.eps
+
         with torch.no_grad():
-            robust_flags_batch = robust_flags.clone()  # Clone robust_flags to preserve updates
             perts_max_l_inf = universal_pert.abs().max().item()
             x_adv = torch.zeros_like(x_orig, device=orig_device)
             y_adv = torch.zeros(n_examples, dtype=torch.long, device=orig_device)
 
             for start_idx in range(0, n_examples, batch_size):
                 end_idx = min(start_idx + batch_size, n_examples)
-
+                batch_indices = torch.arange(start_idx, end_idx, device=orig_device)
                 # Process the current batch
                 x_batch = x_orig[start_idx:end_idx].clone().detach().to(self.device)
                 y_batch = y_orig[start_idx:end_idx].clone().detach().to(self.device)
 
                 # Apply universal perturbation to the current batch
-                x_adv_batch = torch.clamp(x_batch + universal_pert.unsqueeze(0), 0, 1)
+                x_adv_batch = x_batch + universal_pert # TODO: check if okay
+                # Clamp the adversarial examples to the valid RGB range
+                # x_adv_batch = torch.clamp(x_adv_batch, 0, 1) # TODO: this was in the instructions, but check if this is what needed!!!
 
                 # Get predictions on adversarial examples for the current batch
                 output_batch = self.model.forward(x_adv_batch)
@@ -118,16 +126,22 @@ class AdvRunner:
                 y_adv[start_idx:end_idx] = y_adv_batch
                 # Update robust flags for incorrect predictions
                 false_batch = ~y_batch.eq(y_adv_batch).detach()
-                robust_flags_batch[start_idx:end_idx] &= ~false_batch
+                non_robust_indices = batch_indices[false_batch]
+                robust_flags[non_robust_indices] = False
+                if self.attack_report_info:
+                    all_succ[:, :, start_idx:end_idx] = all_batch_succ.to(orig_device)
+                    all_loss[:, :, start_idx:end_idx] = all_batch_loss.to(orig_device)
 
             # Compute final metrics
-            robust_accuracy = (robust_flags_batch.sum(dim=0) / n_examples).item()
+            robust_accuracy = (robust_flags.sum(dim=0) / n_examples).item()
 
+            yaniv_accuracy = 100*(init_accuracy - robust_accuracy)/init_accuracy
             # Print verbose results if required
             if self.verbose:
                 print("reporting results for adversarial attack: " + self.attack_name)
                 print(f"clean accuracy: {init_accuracy:.2%}")
-                print(f"robust accuracy: {robust_accuracy:.2%}")
+                print(f"robust accuracy (LOWER IS BETTER): {robust_accuracy:.2%}")
                 print("perturbations max L_inf:", perts_max_l_inf)
+                print("yaniv_accuracy (HIGHER IS BETTER):", yaniv_accuracy)
 
-        return universal_pert, init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss, None, None, perts_max_l_inf, None, None, None, None
+        return universal_pert, init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss, None, None, perts_max_l_inf, None, None, None, None, yaniv_accuracy, mean_loss_per_step

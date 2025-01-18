@@ -66,6 +66,8 @@ class UPGD(Attack):
             universal_pert: Universal perturbation tensor, shape (C, H, W).
             adv_pert_loss: Final loss after applying the universal perturbation.
         """
+        mean_loss_per_step = []
+
         # Initialize universal perturbation with the same dimensions as inputs
         universal_pert = torch.zeros_like(x[0], device=self.device)
         best_mean_loss = 0.0 # Start from perfect loss - we want to maximize it
@@ -75,10 +77,12 @@ class UPGD(Attack):
         for rest in range(self.n_restarts):
             # Initialize perturbation for this restart
             if self.rand_init:
+                # print("RANDOM INITIALIZATION " * 10)
                 # pert = self.generate_fourier_noise(universal_pert.shape, self.eps)
                 pert = torch.empty_like(universal_pert).uniform_(-self.eps, self.eps)
                 # pert = torch.empty_like(universal_pert).normal_(mean=0, std=self.eps / 4).clamp(-self.eps, self.eps)
             else:
+                # print("ZERO INITIALIZATION " * 10)
                 pert = universal_pert.clone()
 
             pert.requires_grad = True  # Ensure gradient tracking
@@ -112,6 +116,7 @@ class UPGD(Attack):
                     # Re-enable requires_grad for the next iteration
                     pert.requires_grad = True
                 mean_loss = total_loss / len(x)
+                mean_loss_per_step.append(mean_loss)
                 # Update the universal perturbation if it improves performance
                 if mean_loss > best_mean_loss:
                     best_mean_loss = mean_loss
@@ -123,6 +128,4 @@ class UPGD(Attack):
         print(f"EPSILON: {self.eps}")
         print(f"MAX PERT: {universal_pert.abs().max()}")
         print(f"TEST: {universal_pert.abs().max() <= self.eps}")
-        return universal_pert, best_mean_loss
-
-
+        return universal_pert, best_mean_loss, mean_loss_per_step

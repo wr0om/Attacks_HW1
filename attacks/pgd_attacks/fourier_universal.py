@@ -67,9 +67,10 @@ class FourierUPGD(Attack):
             universal_pert: Universal perturbation tensor, shape (C, H, W).
             adv_pert_loss: Final loss after applying the universal perturbation.
         """
+        mean_loss_per_step = []
         # Initialize universal perturbation with the same dimensions as inputs
         universal_pert = torch.zeros_like(x[0], device=self.device)
-        best_loss = 0.0 # Start from perfect loss - we want to maximize it
+        best_mean_loss = 0.0 # Start from perfect loss - we want to maximize it
 
         self.model.eval()
 
@@ -113,14 +114,13 @@ class FourierUPGD(Attack):
 
                     # Re-enable requires_grad for the next iteration
                     pert.requires_grad = True
-
+                mean_loss = total_loss / len(x)
+                mean_loss_per_step.append(mean_loss)
                 # Update the universal perturbation if it improves performance
-                if total_loss > best_loss:
+                if mean_loss > best_mean_loss:
                     alpha = alpha/2
-                    best_loss = total_loss
+                    best_mean_loss = mean_loss
                     universal_pert = pert.clone().detach()  # Detach to save the best perturbation
-                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_loss}")
+                    print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Loss: {best_mean_loss}")
 
-        return universal_pert, best_loss
-
-
+        return universal_pert, best_mean_loss, mean_loss_per_step

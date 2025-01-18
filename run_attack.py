@@ -21,7 +21,7 @@ def run_adv_attacks(args):
 
     (universal_pert, init_accuracy, x_adv, y_adv, robust_accuracy, adv_loss,
      acc_steps, avg_loss_steps, perts_max_l_inf,
-     adv_batch_compute_time_mean, adv_batch_compute_time_std, tot_adv_compute_time, tot_adv_compute_time_std, yaniv_accuracy) = \
+     adv_batch_compute_time_mean, adv_batch_compute_time_std, tot_adv_compute_time, tot_adv_compute_time_std, yaniv_accuracy, mean_loss_per_step) = \
         adv_runner.run_standard_evaluation(args.x_test, args.y_test, args.n_examples, batch_size=args.batch_size)
 
     adv_succ_ratio = (init_accuracy - robust_accuracy) / init_accuracy
@@ -55,15 +55,28 @@ def run_adv_attacks(args):
         print("saving adv inputs tensors to path:")
         print(save_path)
         torch.save(x_adv, args.adv_pert_save_path + '/adv_input.pt')
-        save_path = args.imgs_save_path + '/adv_inputs'
-        print("saving adv inputs images to path:")
-        print(save_path)
-        save_img_tensors(save_path, x_adv, args.y_test, y_adv, args.labels_str_dict)
+        # save_path = args.imgs_save_path + '/adv_inputs'
+        # print("saving adv inputs images to path:")
+        # print(save_path)
+        # save_img_tensors(save_path, x_adv, args.y_test, y_adv, args.labels_str_dict)
 
+        # save universal perturbation
         save_path = args.adv_pert_save_path + '/universal_pert.pt'
         print("saving universal perturbation tensor to path:")
         print(save_path)
         torch.save(universal_pert, save_path)
+
+        # save mean_loss_per_step
+        save_path = args.adv_pert_save_path + '/mean_loss_per_step.pt'
+        print("saving mean loss per step tensor to path:")
+        print(save_path)
+        torch.save(mean_loss_per_step, save_path)
+
+        # save yaniv_accuracy tensor
+        save_path = args.adv_pert_save_path + '/yaniv_accuracy.pt'
+        print("saving yaniv accuracy tensor to path:")
+        print(save_path)
+        torch.save(yaniv_accuracy, save_path)
 
 
 if __name__ == '__main__':

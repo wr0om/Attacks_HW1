@@ -37,9 +37,10 @@ class StochasticUPGD(Attack):
             universal_pert: Universal perturbation tensor, shape (C, H, W).
             adv_pert_loss: Final loss after applying the universal perturbation.
         """
+        mean_loss_per_step = []
         # Initialize universal perturbation with the same dimensions as inputs
         universal_pert = torch.zeros_like(x[0], device=self.device)
-        best_loss = 0.0
+        best_mean_loss = 0.0
 
         self.model.eval()
 
@@ -57,7 +58,7 @@ class StochasticUPGD(Attack):
 
                 # Sample random indices for the iteration
                 indices = torch.randperm(len(x))[:sample_size]
-
+                
                 for batch_start in range(0, len(x), batch_size):
                     batch_indices = indices[(batch_start <= indices) & (indices < batch_start + batch_size)]
 
@@ -85,13 +86,16 @@ class StochasticUPGD(Attack):
 
                     # Re-enable requires_grad for the next iteration
                     pert.requires_grad = True
-
+                print(f"{total_loss=}")
+                mean_loss = total_loss / len(x)
+                print(f"{mean_loss=}")
+                mean_loss_per_step.append(mean_loss)
                 # Update the universal perturbation (always cause we sample random indices)
-                if total_loss > best_loss: # Model has higher loss - pertubation is successfull
-                    best_loss = total_loss
+                if mean_loss > best_mean_loss: # Model has higher loss - pertubation is successfull
+                    best_mean_loss = mean_loss
                     universal_pert = pert.clone().detach()  # Detach to save the best perturbation
-                print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Best Loss: {best_loss}, Current Loss: {total_loss}")
+                print(f"Restart {rest + 1}/{self.n_restarts}, Iteration {_ + 1}/{self.n_iter}, Best Loss: {best_mean_loss}, Current Loss: {mean_loss}")
 
-        return universal_pert, best_loss
+        return universal_pert, best_mean_loss, mean_loss_per_step
 
 
