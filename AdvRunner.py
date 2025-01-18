@@ -4,7 +4,7 @@ from tqdm import trange
 
 # Class for running adversarial attacks and evaluations on a given model
 class AdvRunner:
-    def __init__(self, model, attack, data_RGB_size, device, dtype, verbose=False):
+    def __init__(self, model, attack, data_RGB_size, device, dtype, verbose=False, threshold=0.5):
         # Initialize the AdvRunner with model, attack configurations, and device settings
         self.attack = attack
         self.model = model
@@ -18,6 +18,8 @@ class AdvRunner:
         self.attack_iter = self.attack.n_iter
         self.attack_report_info = self.attack.report_info
         self.attack_name = self.attack.name
+
+        self.threshold = threshold
 
     # Evaluate the model on clean inputs
     # def run_clean_evaluation(self, x_orig, y_orig, n_examples, orig_device, batch_size=128):
@@ -95,9 +97,11 @@ class AdvRunner:
         with torch.cuda.device(self.device):
             x = x_orig.clone().detach()
             y = y_orig.clone().detach()
-
             # Generate the universal perturbation
-            universal_pert, adv_loss, mean_loss_per_step = self.attack.perturb(x, y, batch_size=batch_size)
+            if self.attack_name == 'FourierUPGD':
+                universal_pert, adv_loss, mean_loss_per_step = self.attack.perturb(x, y, batch_size=batch_size, threshold=self.threshold)
+            else:
+                universal_pert, adv_loss, mean_loss_per_step = self.attack.perturb(x, y, batch_size=batch_size)
             # check universal_pert is appropriate norm
             # assert universal_pert.abs().max().item() <= self.attack.eps
 

@@ -17,6 +17,7 @@ class FourierUPGD(Attack):
         data_shape = misc_args['data_shape']
         self.data_RGB_start = torch.tensor(misc_args['data_RGB_start'], device=self.device).view(-1, 1, 1).expand(data_shape)
         self.data_RGB_end = torch.tensor(misc_args['data_RGB_end'], device=self.device).view(-1, 1, 1).expand(data_shape)
+        self.name = 'FourierUPGD'
 
     def report_schematics(self):
 
@@ -27,7 +28,8 @@ class FourierUPGD(Attack):
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
         
-    def generate_fourier_noise(self, image_shape, epsilon):
+    def generate_fourier_noise(self, image_shape, epsilon, threshold=0.5):
+        print("REAL THRESHOLD: ", threshold)
         perts = []
         for i in range(image_shape[0]):
             channels, height, width = image_shape
@@ -37,7 +39,7 @@ class FourierUPGD(Attack):
             y = np.fft.fftfreq(height).reshape(-1, 1)
             x = np.fft.fftfreq(width).reshape(1, -1)
             radius = np.sqrt(x**2 + y**2)
-            high_freq_mask = radius > 0.9  # Emphasize high frequencies (adjust threshold)
+            high_freq_mask = radius > threshold  # Emphasize high frequencies (adjust threshold)
             
             # Apply mask to frequency space
             freq_space *= high_freq_mask
@@ -55,7 +57,7 @@ class FourierUPGD(Attack):
         return torch.tensor(perts, device=self.device, dtype=torch.float32)
 
 
-    def perturb(self, x, y, targeted=False, batch_size=64):
+    def perturb(self, x, y, targeted=False, batch_size=64, threshold=0.5):
         """
         Calculate a universal perturbation for the dataset using batch processing.
         Args:
@@ -77,7 +79,7 @@ class FourierUPGD(Attack):
         for rest in range(self.n_restarts):
             # Initialize perturbation for this restart
             if self.rand_init:
-                pert = self.generate_fourier_noise(universal_pert.shape, self.eps)
+                pert = self.generate_fourier_noise(universal_pert.shape, self.eps, threshold=threshold)
                 # pert = torch.empty_like(universal_pert).uniform_(-self.eps, self.eps)
                 # pert = torch.empty_like(universal_pert).normal_(mean=0, std=self.eps / 4).clamp(-self.eps, self.eps)
             else:

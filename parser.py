@@ -9,7 +9,7 @@ from robustbench.utils import load_model
 import torchvision.transforms as transforms
 from models.cifar10.resnet import ResNet18
 
-from attacks.pgd_attacks import PGD, UPGD, StochasticUPGD, FourierUPGD
+from attacks.pgd_attacks import PGD, UPGD, StochasticUPGD, FourierUPGD, NewAttack
 
 
 def parse_args():
@@ -35,12 +35,16 @@ def parse_args():
     # Use --model_name Wong2020Fast for robust PreActResNet-18 model
     # attack args
     # pgd attacks args
-    parser.add_argument('--attack', type=str, default='PGD', help='PGD, UPGD, StochasticUPGD, FourierUPGD')
+    parser.add_argument('--attack', type=str, default='PGD', help='PGD, UPGD, StochasticUPGD, FourierUPGD, NewAttack')
     parser.add_argument('--eps_l_inf_from_255', type=int, default=8)
     parser.add_argument('--n_iter', type=int, default=100)
     parser.add_argument('--n_restarts', type=int, default=1, help='number of restart iterations for pgd_attacks')
     parser.add_argument('--alpha', type=float, default=0.01)
     parser.add_argument('--att_init_zeros', action='store_true', help='initialize the adversarial pertubation to zeroes (default: random initialization)')
+    
+    # ADDED args
+    parser.add_argument('--threshold', type=float, default=0.5)
+
 
     args = parser.parse_args()
     print("args")
@@ -107,7 +111,7 @@ def compute_attack_args(args):
     args.eps_l_inf = args.eps_l_inf_from_255 / 255
     args.att_rand_init = not args.att_init_zeros
 
-    attack_dict = {'PGD': PGD, 'UPGD': UPGD, 'StochasticUPGD': StochasticUPGD, 'FourierUPGD': FourierUPGD}
+    attack_dict = {'PGD': PGD, 'UPGD': UPGD, 'StochasticUPGD': StochasticUPGD, 'FourierUPGD': FourierUPGD, 'NewAttack': NewAttack}
     args.attack_name = args.attack
     if args.attack in attack_dict:
         args.attack = attack_dict[args.attack]
@@ -137,7 +141,12 @@ def compute_attack_args(args):
                           "_iter_" + str(args.n_iter) + \
                           "_restarts_" + str(args.n_restarts) + \
                           "_alpha_" + str(args.alpha).replace('.', '_') + \
-                          "_rand_init_" + str(args.att_rand_init)
+                          "_rand_init_" + str(args.att_rand_init) + \
+                            "_batch_size_" + str(args.batch_size) #ADDED BATCH_SIZE TO NAME
+
+    # if we are fourier attack we need to set the threshold
+    if args.attack_name == 'FourierUPGD':
+        args.attack_obj_str += "_threshold_" + str(args.threshold).replace('.', '_')
 
     args.attack_obj = args.attack(args.model, args.criterion,
                                       misc_args=args.att_misc_args,

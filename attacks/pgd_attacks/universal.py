@@ -18,6 +18,7 @@ class UPGD(Attack):
         self.data_RGB_start = torch.tensor(misc_args['data_RGB_start'], device=self.device).view(-1, 1, 1).expand(data_shape)
         self.data_RGB_end = torch.tensor(misc_args['data_RGB_end'], device=self.device).view(-1, 1, 1).expand(data_shape)
 
+        self.name = 'UPGD'
     def report_schematics(self):
 
         print("Attack L_inf norm limitation:")
@@ -26,33 +27,6 @@ class UPGD(Attack):
         print(self.n_iter)
         print("Number of restarts for perturbation optimization:")
         print(self.n_restarts)
-        
-    # def generate_fourier_noise(self, image_shape, epsilon):
-    #     perts = []
-    #     for i in range(image_shape[0]):
-    #         channels, height, width = image_shape
-    #         freq_space = np.fft.fft2(np.random.normal(size=(height, width)))
-            
-    #         # Generate high-frequency emphasis mask
-    #         y = np.fft.fftfreq(height).reshape(-1, 1)
-    #         x = np.fft.fftfreq(width).reshape(1, -1)
-    #         radius = np.sqrt(x**2 + y**2)
-    #         high_freq_mask = radius > 0.3  # Emphasize high frequencies (adjust threshold)
-            
-    #         # Apply mask to frequency space
-    #         freq_space *= high_freq_mask
-            
-    #         # Transform back to spatial domain
-    #         noise = np.fft.ifft2(freq_space).real
-            
-    #         # Normalize to [-epsilon, epsilon]
-    #         noise = (noise - np.mean(noise)) / (np.max(np.abs(noise)) + 1e-10) * epsilon
-    #         plt.imshow(noise)
-    #         plt.savefig('noise.png')
-    #         plt.close()
-    #         perts.append(noise)
-    #     return torch.tensor(perts, device=self.device, dtype=torch.float32)
-
 
     def perturb(self, x, y, targeted=False, batch_size=64):
         """
